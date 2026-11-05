@@ -51,7 +51,7 @@ CHECKS = {
     """,
     "immatriculations invalides": """
         SELECT COUNT(*) FROM planes
-        WHERE NOT REGEXP_LIKE(tailnum, '^N[A-Z0-9]{1,5}$', 'c')
+        WHERE NOT REGEXP_LIKE(tailnum, '^[A-Z0-9]{1,6}$', 'c')
     """,
     "codes origin/dest invalides dans flights": """
         SELECT COUNT(*) FROM flights
@@ -93,15 +93,12 @@ CHECKS = {
 
 def main() -> None:
     load_dotenv(ROOT / ".env")
-    required = ("MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE", "MYSQL_SSL_CA")
+    required = ("MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE")
     missing = [key for key in required if not os.getenv(key)]
     if missing:
         raise RuntimeError(
             "Variables MySQL absentes du fichier .env: " + ", ".join(missing)
         )
-    ssl_ca = Path(os.environ["MYSQL_SSL_CA"])
-    if not ssl_ca.is_file():
-        raise FileNotFoundError(f"Certificat CA MySQL introuvable: {ssl_ca}")
 
     config = {
         "host": os.environ["MYSQL_HOST"],
@@ -110,10 +107,20 @@ def main() -> None:
         "password": os.environ["MYSQL_PASSWORD"],
         "database": os.environ["MYSQL_DATABASE"],
         "charset": "utf8mb4",
-        "ssl_ca": str(ssl_ca),
-        "ssl_verify_cert": True,
-        "ssl_verify_identity": True,
     }
+    if os.getenv("MYSQL_SSL_DISABLED", "").lower() == "true":
+        config["ssl_disabled"] = True
+    else:
+        ssl_ca = os.getenv("MYSQL_SSL_CA")
+        if not ssl_ca:
+            raise RuntimeError("MYSQL_SSL_CA doit pointer vers le certificat CA TLS.")
+        if not Path(ssl_ca).is_file():
+            raise FileNotFoundError(f"Certificat CA MySQL introuvable: {ssl_ca}")
+        config.update(
+            ssl_ca=ssl_ca,
+            ssl_verify_cert=True,
+            ssl_verify_identity=True,
+        )
     with mysql.connector.connect(**config) as conn:
         with conn.cursor() as cur:
             results = {}

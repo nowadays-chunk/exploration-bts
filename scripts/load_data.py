@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import re
 from pathlib import Path
@@ -62,7 +63,7 @@ KEY_COLUMNS = {
 CODE_PATTERNS = {
     "airlines.carrier": re.compile(r"^[A-Z0-9]{2}$"),
     "airports.faa": re.compile(r"^[A-Z0-9]{3}$"),
-    "planes.tailnum": re.compile(r"^N[A-Z0-9]{1,5}$"),
+    "planes.tailnum": re.compile(r"^[A-Z0-9]{1,6}$"),
     "weather.origin": re.compile(r"^[A-Z0-9]{3}$"),
     "flights.origin": re.compile(r"^[A-Z0-9]{3}$"),
     "flights.dest": re.compile(r"^[A-Z0-9]{3}$"),
@@ -150,6 +151,16 @@ def validate_source(frames: dict[str, pd.DataFrame]) -> None:
         f"{len(missing_planes)} avions référencés sans fiche planes, "
         f"{frames['flights']['tailnum'].isna().sum()} vols sans tailnum."
     )
+    non_us_registrations = sorted(
+        tailnum
+        for tailnum in set(frames["flights"]["tailnum"].dropna().astype(str))
+        if not re.fullmatch(r"N[A-Z0-9]{1,5}", tailnum)
+    )
+    if non_us_registrations:
+        print(
+            "Immatriculations valides hors format US N: "
+            f"{len(non_us_registrations)} ({', '.join(non_us_registrations[:10])})."
+        )
 
 
 def insert_frame(cur, table: str, frame: pd.DataFrame) -> None:
@@ -188,16 +199,23 @@ def insert_frame(cur, table: str, frame: pd.DataFrame) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Télécharge et importe les données publiques nycflights13 dans MySQL."
+    )
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="remplace les données déjà présentes dans les cinq tables.",
+    )
+    args = parser.parse_args()
+
     load_dotenv(ROOT / ".env")
-    required = ("MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE", "MYSQL_SSL_CA")
+    required = ("MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE")
     missing = [key for key in required if not os.getenv(key)]
     if missing:
         raise RuntimeError(
             "Variables MySQL absentes du fichier .env: " + ", ".join(missing)
         )
-    ssl_ca = Path(os.environ["MYSQL_SSL_CA"])
-    if not ssl_ca.is_file():
-        raise FileNotFoundError(f"Certificat CA MySQL introuvable: {ssl_ca}")
 
     frames = load_source_data()
     validate_source(frames)
@@ -209,25 +227,85 @@ def main() -> None:
         "password": os.environ["MYSQL_PASSWORD"],
         "database": os.environ["MYSQL_DATABASE"],
         "charset": "utf8mb4",
-        "ssl_ca": str(ssl_ca),
-        "ssl_verify_cert": True,
-        "ssl_verify_identity": True,
     }
+    if os.getenv("MYSQL_SSL_DISABLED", "").lower() == "true":
+        config["ssl_disabled"] = True
+    else:
+        ssl_ca = os.getenv("MYSQL_SSL_CA")
+        if not ssl_ca:
+            raise RuntimeError("MYSQL_SSL_CA doit pointer vers le certificat CA TLS.")
+        if not Path(ssl_ca).is_file():
+            raise FileNotFoundError(f"Certificat CA MySQL introuvable: {ssl_ca}")
+        config.update(
+            ssl_ca=ssl_ca,
+            ssl_verify_cert=True,
+            ssl_verify_identity=True,
+        )
 
     with mysql.connector.connect(**config) as conn:
         with conn.cursor() as cur:
             cur.execute("SHOW STATUS LIKE 'Ssl_cipher'")
             ssl_status = cur.fetchone()
-            if not ssl_status or not ssl_status[1]:
+            if (
+                os.getenv("MYSQL_SSL_DISABLED", "").lower() != "true"
+                and (not ssl_status or not ssl_status[1])
+            ):
                 raise RuntimeError("Connexion MySQL non chiffrée: chargement annulé.")
 
             for statement in schema_sql.split(";"):
                 if statement.strip():
                     cur.execute(statement)
 
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.TABLE_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'planes'
+                  AND CONSTRAINT_NAME = 'planes_tailnum_format'
+                  AND CONSTRAINT_TYPE = 'CHECK'
+                """
+            )
+            if cur.fetchone()[0]:
+                cur.execute("ALTER TABLE planes DROP CHECK planes_tailnum_format")
+            cur.execute(
+                """
+                ALTER TABLE planes
+                ADD CONSTRAINT planes_tailnum_format
+                CHECK (REGEXP_LIKE(tailnum, '^[A-Z0-9]{1,6}$', 'c'))
+                """
+            )
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'weather'
+                  AND INDEX_NAME = 'weather_origin_time_idx'
+                """
+            )
+            if not cur.fetchone()[0]:
+                cur.execute(
+                    "ALTER TABLE weather "
+                    "ADD KEY weather_origin_time_idx (origin, time_hour)"
+                )
+
             conn.start_transaction()
-            for table in ("flights", "weather", "planes", "airports", "airlines"):
-                cur.execute(f"DELETE FROM `{table}`")
+            counts = {}
+            for table in DATASETS:
+                cur.execute(f"SELECT COUNT(*) FROM `{table}`")
+                counts[table] = cur.fetchone()[0]
+            populated = {table: count for table, count in counts.items() if count}
+            if populated and not args.replace:
+                conn.rollback()
+                raise RuntimeError(
+                    "La base contient déjà des données: "
+                    + ", ".join(f"{table}={count}" for table, count in populated.items())
+                    + ". Relancez avec --replace pour les remplacer."
+                )
+            if args.replace:
+                for table in ("flights", "weather", "planes", "airports", "airlines"):
+                    cur.execute(f"DELETE FROM `{table}`")
 
             for table in ("airlines", "airports", "planes"):
                 insert_frame(cur, table, frames[table])
@@ -265,7 +343,10 @@ def main() -> None:
             cur.execute("SELECT COUNT(*) FROM flights")
             flight_count = cur.fetchone()[0]
         conn.commit()
-    print(f"Chargement terminé: {flight_count:,} vols; SSL actif.")
+    print(
+        f"Chargement terminé: {flight_count:,} vols; "
+        f"SSL actif: {os.getenv('MYSQL_SSL_DISABLED', '').lower() != 'true'}."
+    )
 
 
 if __name__ == "__main__":

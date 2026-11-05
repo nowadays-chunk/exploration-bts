@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102b3c">
+  <meta name="description" content="FlightOps — tableau de bord historique pour analyser retards, annulations et risques des vols NYC 2013.">
+  <title>{% block title %}FlightOps | Aide à la décision{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">F</span>
+      <span>Flight<span class="brand-light">Ops</span></span>
+    </a>
+    <div class="topbar-right">
+      <span class="live-dot"></span>
+      <span>ANALYSE HISTORIQUE</span>
+      <span class="dataset-tag">NYC · 2013</span>
+    </div>
+  </header>
+  <main class="page-shell">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    <span>FlightOps — outil d’aide à la décision</span>
+    <span>Données historiques nycflights13 · pas de données temps réel</span>
+  </footer>
+</body>
+</html>

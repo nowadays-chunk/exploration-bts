@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord | FlightOps{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <span class="eyebrow">CENTRE DE PILOTAGE · DONNÉES HISTORIQUES</span>
+    <h1>Anticiper les perturbations,<br><span>mieux décider.</span></h1>
+    <p>Analyse des opérations passées et estimation du risque à partir des situations comparables.</p>
+  </div>
+  <div class="hero-aside">
+    <span class="hero-icon">↗</span>
+    <span>INSIGHT</span>
+    <strong>Rapports &<br>prévisions</strong>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-heading">
+    <div><span class="eyebrow">VUE D’ENSEMBLE</span><h2>Performance opérationnelle</h2></div>
+    <span class="muted small">Période couverte : année 2013</span>
+  </div>
+  <div class="metric-grid">
+    <article class="metric-card">
+      <span class="metric-label">VOLS PROGRAMMÉS</span>
+      <strong>{{ "{:,}".format(summary.total_flights or 0).replace(",", " ") }}</strong>
+      <span class="metric-foot">Toutes compagnies confondues</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">VOLS OPÉRÉS</span>
+      <strong>{{ "{:,}".format(summary.operated_flights or 0).replace(",", " ") }}</strong>
+      <span class="metric-foot">Départ enregistré</span>
+    </article>
+    <article class="metric-card accent-orange">
+      <span class="metric-label">ANNULATIONS</span>
+      <strong>{{ "{:,}".format(summary.cancelled_flights or 0).replace(",", " ") }}</strong>
+      <span class="metric-foot">{{ summary.cancellation_rate or 0 }} % des vols</span>
+    </article>
+    <article class="metric-card accent-blue">
+      <span class="metric-label">RETARD DÉPART MOYEN</span>
+      <strong>{{ summary.average_departure_delay if summary.average_departure_delay is not none else "—" }}<small> min</small></strong>
+      <span class="metric-foot">{{ summary.late_departure_rate or 0 }} % avec ≥ 15 min de retard</span>
+    </article>
+  </div>
+</section>
+
+<section class="section two-column">
+  <article class="panel">
+    <div class="panel-heading">
+      <div><span class="eyebrow">SAISONNALITÉ</span><h2>Activité et retards par mois</h2></div>
+      <span class="legend"><i></i> Vols opérés</span>
+    </div>
+    <div class="month-chart">
+      {% for row in monthly %}
+      <div class="month-row">
+        <span class="month-name">{{ ["", "Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"][row.month] }}</span>
+        <div class="bar-track"><div class="bar-fill" style="width: {{ row.bar_width }}%"></div></div>
+        <span class="bar-number">{{ "{:,}".format(row.flight_count).replace(",", " ") }}</span>
+        <span class="month-detail">{{ row.average_delay if row.average_delay is not none else "—" }} min · {{ row.cancellation_rate or 0 }} % ann.</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="panel-note">La moyenne de retard exclut les vols annulés. Le taux d’annulation est calculé sur l’ensemble des vols programmés.</p>
+  </article>
+
+  <article class="panel">
+    <div class="panel-heading">
+      <div><span class="eyebrow">POINTS DE DÉPART</span><h2>Trafic par aéroport</h2></div>
+    </div>
+    <div class="origin-list">
+      {% for row in origins %}
+      <div class="origin-row">
+        <span class="airport-code">{{ row.origin }}</span>
+        <div class="origin-main">
+          <div class="origin-label"><span>{{ row.name }}</span><b>{{ "{:,}".format(row.flight_count).replace(",", " ") }}</b></div>
+          <div class="bar-track"><div class="bar-fill green" style="width: {{ row.bar_width }}%"></div></div>
+          <small>Retard moyen : {{ row.average_delay if row.average_delay is not none else "—" }} min</small>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="section two-column">
+  <article class="panel">
+    <div class="panel-heading">
+      <div><span class="eyebrow">COMPARAISON</span><h2>Compagnies à surveiller</h2></div>
+      <span class="muted small">Min. 100 vols</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Compagnie</th><th>Vols</th><th>Retard moyen</th><th>Annulations</th></tr></thead>
+        <tbody>
+        {% for row in airlines %}
+          <tr><td><span class="carrier-code">{{ row.carrier }}</span>{{ row.name }}</td>
+          <td>{{ "{:,}".format(row.flight_count).replace(",", " ") }}</td>
+          <td>{{ row.average_delay if row.average_delay is not none else "—" }} min</td>
+          <td><span class="rate-pill">{{ row.cancellation_rate or 0 }} %</span></td></tr>
+        {% else %}
+          <tr><td colspan="4">Aucune donnée de compagnie disponible.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+  <article class="panel">
+    <div class="panel-heading">
+      <div><span class="eyebrow">DESTINATIONS</span><h2>Retards les plus fréquents</h2></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Aéroport</th><th>Vols</th><th>Retard moyen</th><th>≥ 15 min</th></tr></thead>
+        <tbody>
+        {% for row in destinations %}
+          <tr><td><span class="carrier-code">{{ row.dest }}</span>{{ row.name }}</td>
+          <td>{{ "{:,}".format(row.flight_count).replace(",", " ") }}</td>
+          <td>{{ row.average_delay if row.average_delay is not none else "—" }} min</td>
+          <td><span class="rate-pill">{{ row.late_rate or 0 }} %</span></td></tr>
+        {% else %}
+          <tr><td colspan="4">Aucune donnée de destination disponible.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<section class="section">
+  <article class="panel">
+    <div class="panel-heading">
+      <div><span class="eyebrow">FACTEUR OPÉRATIONNEL</span><h2>Retards et annulations selon les précipitations observées</h2></div>
+      <span class="muted small">Météo horaire à l’aéroport d’origine</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Précipitations</th><th>Vols associés</th><th>Retard moyen</th><th>Retard ≥ 15 min</th><th>Annulations</th></tr></thead>
+        <tbody>
+        {% for row in weather_impact %}
+          <tr><td>{{ row.weather_group }}</td>
+          <td>{{ "{:,}".format(row.flight_count).replace(",", " ") }}</td>
+          <td>{{ row.average_delay if row.average_delay is not none else "—" }} min</td>
+          <td><span class="rate-pill">{{ row.late_rate or 0 }} %</span></td>
+          <td>{{ row.cancellation_rate or 0 }} %</td></tr>
+        {% else %}
+          <tr><td colspan="5">Aucune donnée météo associée aux vols.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="panel-note">Association descriptive sur les observations passées, pas une relation causale. « Faible » correspond à des précipitations horaires ≤ 0,1 pouce; les valeurs supérieures sont classées « Forte ».</p>
+  </article>
+</section>
+
+<section class="section predictor-section" id="prediction">
+  <div class="predictor-intro">
+    <span class="eyebrow">AIDE À LA DÉCISION</span>
+    <h2>Évaluer un scénario de vol</h2>
+    <p>Comparez les paramètres prévus aux vols historiques similaires pour estimer un risque de perturbation.</p>
+    <div class="definition"><b>Événement à risque</b><br>Vol annulé ou retard au départ d’au moins 15 minutes.</div>
+  </div>
+  <div class="predictor-panel">
+    <form method="get" action="/">
+      <div class="form-grid">
+        <label>Aéroport de départ
+          <select name="origin" required>
+            {% for airport in origin_options %}
+            <option value="{{ airport.faa }}" {% if form.origin == airport.faa %}selected{% endif %}>{{ airport.faa }} — {{ airport.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Destination
+          <select name="destination">
+            <option value="">Toutes destinations</option>
+            {% for airport in airport_options %}
+            <option value="{{ airport.faa }}" {% if form.destination == airport.faa %}selected{% endif %}>{{ airport.faa }} — {{ airport.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Compagnie
+          <select name="carrier">
+            <option value="">Toutes compagnies</option>
+            {% for airline in carrier_options %}
+            <option value="{{ airline.carrier }}" {% if form.carrier == airline.carrier %}selected{% endif %}>{{ airline.carrier }} — {{ airline.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Mois prévu
+          <select name="month">
+            {% for month in range(1, 13) %}
+            <option value="{{ month }}" {% if form.month|int == month %}selected{% endif %}>{{ ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"][month] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Heure programmée
+          <select name="hour">
+            {% for hour in range(0, 24) %}
+            <option value="{{ hour }}" {% if form.hour|int == hour %}selected{% endif %}>{{ "%02d"|format(hour) }}:00</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <button class="button" type="submit" name="predict" value="1">Estimer le risque <span>→</span></button>
+    </form>
+
+    {% if prediction_error %}
+    <div class="form-error" role="alert">{{ prediction_error }}</div>
+    {% endif %}
+    {% if prediction %}
+    <div class="prediction-result">
+      <div class="risk-number">{{ prediction.risk_percent }}<small>%</small></div>
+      <div class="risk-copy">
+        <span class="eyebrow">RISQUE HISTORIQUE ESTIMÉ · {{ prediction.confidence|upper }}</span>
+        <strong>
+          {% if prediction.risk_percent >= 40 %}Vigilance renforcée
+          {% elif prediction.risk_percent >= 20 %}Risque modéré
+          {% else %}Risque historique plus faible{% endif %}
+        </strong>
+        <span>{{ prediction.sample_size }} vols comparables · périmètre : {{ prediction.scope }}</span>
+      </div>
+    </div>
+    <p class="panel-note">Retard moyen observé pour ce groupe : {{ prediction.average_delay if prediction.average_delay is not none else "donnée indisponible" }}{% if prediction.average_delay is not none %} min{% endif %}. Le taux est lissé vers le taux de l’aéroport d’origine ({{ prediction.prior_percent }} %) pour limiter l’effet des petits échantillons.</p>
+    {% endif %}
+  </div>
+  <p class="prediction-caveat"><strong>À interpréter avec prudence :</strong> estimation descriptive issue du jeu historique 2013, pas une prévision opérationnelle ni un modèle validé. Elle ne tient pas compte de la météo en temps réel, des ressources disponibles ou des événements futurs.</p>
+</section>
+
+<section class="action-strip">
+  <div><span class="eyebrow">À RETENIR</span><h2>Transformer le passé en préparation.</h2></div>
+  <p>Surveillez les périodes, routes et opérateurs où les perturbations ont été les plus fréquentes. Croisez ces signaux avec les conditions opérationnelles du jour avant toute décision.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Base indisponible | FlightOps{% endblock %}
+{% block content %}
+<section class="error-card">
+  <span class="eyebrow">CONNEXION À LA BASE</span>
+  <h1>Le tableau de bord ne peut pas charger les données.</h1>
+  <p>Vérifiez les paramètres MySQL dans <code>.env</code>, la disponibilité du serveur et les règles réseau.</p>
+  <pre>{{ message }}</pre>
+  {% if ssl_disabled %}
+  <p class="warning">TLS est désactivé. Cette option ne doit être utilisée que pour un serveur local de développement.</p>
+  {% else %}
+  <p>Pour une base distante, configurez le certificat du fournisseur dans <code>MYSQL_SSL_CA</code>. Le certificat et le nom d’hôte sont vérifiés.</p>
+  {% endif %}
+</section>
+{% endblock %}

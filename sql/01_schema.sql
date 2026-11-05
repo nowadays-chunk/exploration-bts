@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS planes (
     metadata_source VARCHAR(32) NOT NULL DEFAULT 'dataset',
     PRIMARY KEY (tailnum),
     CONSTRAINT planes_tailnum_format
-        CHECK (REGEXP_LIKE(tailnum, '^N[A-Z0-9]{1,5}$', 'c')),
+        CHECK (REGEXP_LIKE(tailnum, '^[A-Z0-9]{1,6}$', 'c')),
     CONSTRAINT planes_metadata_source
         CHECK (metadata_source IN ('dataset', 'flight_reference'))
 ) ENGINE=InnoDB;
@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS weather (
     CONSTRAINT weather_origin_format
         CHECK (REGEXP_LIKE(origin, '^[A-Z0-9]{3}$', 'c')),
     CONSTRAINT weather_origin_airport_fk
-        FOREIGN KEY (origin) REFERENCES airports (faa)
+        FOREIGN KEY (origin) REFERENCES airports (faa),
+    KEY weather_origin_time_idx (origin, time_hour)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS flights (
