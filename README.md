@@ -150,6 +150,7 @@ Depuis la racine du projet, après le chargement de MySQL et la configuration de
 `.env`:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 python app.py
 ```
