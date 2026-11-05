@@ -74,6 +74,9 @@ sans inventer leurs métadonnées.
    python scripts\verify.py
    ```
 
+Les requêtes d'exploration correspondant aux questions du sujet sont dans
+[sql/explotartion.sql](./sql/explotartion.sql).
+
 ## Anomalies et traitement retenu
 
 - `flight` seul n'est pas unique; la clé composite demandée est contrôlée avant
